@@ -42,8 +42,9 @@
     box-shadow: 0 8px 18px rgba(59,130,246,.4), 0 0 0 2px rgba(59,130,246,.35);
   }
   .group-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.15); }
-  .group-header h2 { font-size:24px; font-weight:700; }
+  .group-header h2 { font-size:24px; font-weight:700; margin-bottom:2px; }
   .group-header p { font-size:14px; color:#9bb8da; margin-top:3px; }
+  .slogan { font-size:13px; color:#60a5fa; letter-spacing:1px; text-shadow: 0 0 10px rgba(96,165,250,.5); margin-bottom:2px; }
   .member-count {
     background: rgba(59,130,246,.25); padding:3px 10px; border-radius:30px;
     font-size:12px; color:#b3d9ff; margin-left:6px;
@@ -164,7 +165,8 @@
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%) scale(1.15);
   }
-  .logo-text { font-weight:700; font-size:19px; }
+  .logo-text { font-weight:700; font-size:19px; line-height:1.1; }
+  .logo-slogan { font-size:11px; color:#60a5fa; margin-top:3px; letter-spacing:1px; text-shadow: 0 0 8px rgba(96,165,250,.4); }
   .topbar-right { display:flex; align-items:center; gap:10px; }
   .user-chip {
     display:flex; align-items:center; gap:8px; cursor:pointer;
@@ -500,6 +502,7 @@
         </div>
         <div>
           <h2>解忧杂货铺</h2>
+          <p class="slogan">青春相逢，缘聚同行</p>
           <p>群号: 913714155 <span class="member-count" id="memberCount">20 名成员</span></p>
         </div>
       </div>
@@ -529,7 +532,10 @@
                  onerror="this.style.display='none';this.parentNode.textContent='🎮';this.parentNode.style.background='linear-gradient(135deg,#3b82f6,#8b5cf6)';this.parentNode.style.fontSize='22px';"
             >
           </div>
-          <div class="logo-text">解忧杂货铺</div>
+          <div style="display:flex; flex-direction:column; justify-content:center;">
+            <div class="logo-text">解忧杂货铺</div>
+            <div class="logo-slogan">青春相逢，缘聚同行</div>
+          </div>
         </div>
         <div class="topbar-right">
           <div class="user-chip" id="userChip">
@@ -1782,7 +1788,6 @@ function bindDrawEvents(container) {
   document.getElementById('draw-create-btn').onclick = () => {
     const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
     
-    // 腾讯云 CloudBase 建房间
     db.collection('rooms').doc(roomId).set({
       status: 'drawing',
       drawerId: String(user.memberId),
@@ -1859,7 +1864,6 @@ function bindDrawEvents(container) {
   document.getElementById('draw-submit-btn').onclick = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
     
-    // 腾讯云更新
     db.collection('rooms').doc(drawRoomId).update({
       imageData: imageData,
       status: 'guessing'
@@ -1883,7 +1887,6 @@ function bindDrawEvents(container) {
       if (room.word === val) {
         document.getElementById('draw-guess-input').value = '';
         
-        // 加分
         let players = room.players || {};
         if (!players[user.memberId]) players[user.memberId] = {};
         players[user.memberId].score = (players[user.memberId].score || 0) + 10;
@@ -1910,7 +1913,6 @@ function bindDrawEvents(container) {
     const myUser = loadUser();
     const myId = myUser.memberId;
 
-    // 腾讯云实时监听 (watch)
     if (drawWatcher) drawWatcher.close();
     drawWatcher = db.collection('rooms').doc(roomId).watch({
       onChange: function(snapshot) {
@@ -2001,13 +2003,11 @@ function bindDrawEvents(container) {
       }
     });
 
-    // 退出时清理监听
     drawCleanup = () => {
       if (drawWatcher) drawWatcher.close();
       drawWatcher = null;
       drawRoomId = null;
       
-      // 从房间移除自己
       db.collection('rooms').doc(roomId).get().then(res => {
         if (res.data && res.data.length > 0) {
           let players = res.data[0].players || {};
