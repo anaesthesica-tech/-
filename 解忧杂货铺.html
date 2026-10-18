@@ -3,11 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>喵喵</title>
-<!-- Three.js CDN (跳一跳用到) -->
+<title>解忧杂货铺</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
   * { margin:0; padding:0; box-sizing:border-box; font-family: system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif; }
@@ -30,7 +27,7 @@
   .screen.active { display:flex; }
   @keyframes fade { from{opacity:.5; transform:scale(.99);} to{opacity:1; transform:scale(1);} }
 
-  /* ========== 验证页 ========== */
+  /* 验证页 */
   .group-header { display:flex; align-items:center; gap:14px; margin-bottom:22px; }
   .group-avatar {
     width:64px; height:64px; border-radius: 50%;
@@ -107,7 +104,7 @@
   .member-item:hover .arrow { color:#60a5fa; transform: translateX(4px) scale(1.15); }
   .footer-note { font-size:12px; color:#4a607a; text-align:center; margin-top:20px; letter-spacing:.5px; }
 
-  /* ========== 验证输入页 ========== */
+  /* 输入页 */
   .input-page-wrap { max-width: 460px; width:100%; margin: 20px auto 0; }
   .back-btn {
     display:inline-flex; align-items:center; gap:8px;
@@ -148,7 +145,7 @@
   .error-msg { color:#f87171; font-size:14px; margin-top:10px; padding-left:8px; min-height:20px; }
   .hint-text { font-size:12px; color:#6886a6; margin-top:14px; text-align:center; }
 
-  /* ========== 游戏平台 ========== */
+  /* 游戏平台 */
   .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:10px; flex-wrap:wrap; }
   .topbar-left { display:flex; align-items:center; gap:10px; }
   .logo {
@@ -306,7 +303,7 @@
   .avatar-option.selected { border-color:#3b82f6; transform:scale(1.08); }
   .avatar-option:hover { transform:scale(1.08); }
 
-  /* ========== 跳一跳样式 ========== */
+  /* 跳一跳 */
   .jump-game-wrap {
     position: relative; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
@@ -332,7 +329,7 @@
   .jump-lb-btn:hover { transform: translateY(-2px); }
   .jump-lb-btn:active { transform: scale(.97); }
 
-  /* ========== 排行榜样式 ========== */
+  /* 排行榜 */
   .lb-mask {
     position: fixed; inset: 0; background: rgba(0,0,0,.7);
     backdrop-filter: blur(6px); display: none;
@@ -388,7 +385,7 @@
   }
   .lb-close:hover { background: rgba(255,255,255,.15); }
 
-  /* ========== 猜数字样式 ========== */
+  /* 猜数字 */
   .guess-wrap {
     width: 100%; max-width: 420px;
     display: flex; flex-direction: column; align-items: center; gap: 14px;
@@ -486,6 +483,13 @@
     border-color: rgba(255,255,255,.06);
     text-decoration: none;
   }
+
+  /* 你画我猜 */
+  .draw-btn {
+    background: #3b82f6; border: none; border-radius: 60px;
+    padding: 12px 24px; color: #fff; font-weight: 600; cursor: pointer; transition: .15s;
+  }
+  .draw-btn:hover { background: #2563eb; }
 </style>
 </head>
 <body>
@@ -1685,19 +1689,18 @@ function startGuessGame(container) {
 }
 
 /* ============================================================
-   ★★★ Supabase 初始化 & 你画我猜 ★★★
+   ★★★ 你画我猜（Cloudflare Worker 版） ★★★
    ============================================================ */
-const SUPABASE_URL = "https://eivnadghuybcztdaygwv.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpdm5hZGdodXliY3p0ZGF5Z3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyOTY0NzQsImV4cCI6MjEwNzg3MjQ3NH0.4LzNnqAEEKM8tXZghDlIN2C86hnMetK9nq9ZxPaQNhg";
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
+// 这里换成你刚才发给我的 Worker 网址
+const WORKER_URL = "https://index.anaesthesica.workers.dev";
 const DRAW_WORDS = ['苹果', '太阳', '小狗', '汽车', '大树', '房子', '雨伞', '眼镜', '手机', '电视', '鼠标', '键盘', '帽子', '鞋子', '花朵', '大象', '长颈鹿', '冰淇淋', '汉堡', '西瓜'];
 
 let drawRoomId = null;
+let drawInterval = null;
 let canvasCtx = null;
 let isDrawing = false;
 let drawCleanup = null;
-let drawChannel = null;
+let lastRoomData = null;
 
 function startDrawGame(container) {
   const user = loadUser();
@@ -1706,14 +1709,13 @@ function startDrawGame(container) {
   container.innerHTML = `
     <div style="width:100%;max-width:500px;display:flex;flex-direction:column;gap:16px;padding:10px;box-sizing:border-box;">
       
-      <!-- 大厅界面 -->
       <div id="draw-lobby" style="display:flex;flex-direction:column;gap:12px;text-align:center;">
         <h3 style="font-size:20px;margin-bottom:10px;">🎨 你画我猜</h3>
         <p style="font-size:13px;color:#9bb8da;margin-bottom:20px;">房间号分享给群友，即可一起游玩</p>
         
         <div style="display:flex;gap:8px;">
-          <input type="text" id="draw-room-input" placeholder="输入房间号" style="flex:1;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.1);border-radius:60px;padding:12px 20px;color:#fff;outline:none;text-align:center;">
-          <button id="draw-join-btn" style="background:#3b82f6;border:none;border-radius:60px;padding:12px 24px;color:#fff;font-weight:600;cursor:pointer;">加入</button>
+          <input type="tel" id="draw-room-input" maxlength="4" placeholder="输入4位数字" style="flex:1;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.1);border-radius:60px;padding:12px 20px;color:#fff;outline:none;text-align:center;">
+          <button id="draw-join-btn" class="draw-btn">加入</button>
         </div>
         
         <div style="margin:10px 0;color:#6886a6;font-size:12px;">— 或者 —</div>
@@ -1721,20 +1723,15 @@ function startDrawGame(container) {
         <button id="draw-create-btn" style="background:linear-gradient(135deg,#8b5cf6,#3b82f6);border:none;border-radius:50px;padding:14px;color:#fff;font-weight:600;font-size:16px;cursor:pointer;">创建新房间</button>
       </div>
 
-      <!-- 房间界面 -->
       <div id="draw-room" style="display:none;flex-direction:column;gap:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.05);padding:10px 16px;border-radius:16px;">
           <span style="font-size:13px;color:#9bb8da;">房间号：<strong id="draw-room-id-display" style="color:#60a5fa;font-size:16px;letter-spacing:1px;"></strong></span>
           <button id="draw-leave-btn" style="background:none;border:1px solid rgba(255,255,255,.2);color:#c2d9f0;border-radius:40px;padding:6px 12px;font-size:12px;cursor:pointer;">退出房间</button>
         </div>
 
-        <div id="draw-players" style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:#9bb8da;padding:0 4px;">
-          <!-- 玩家列表 -->
-        </div>
-
+        <div id="draw-players" style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:#9bb8da;padding:0 4px;"></div>
         <div id="draw-status" style="text-align:center;font-size:15px;font-weight:600;color:#fbbf24;min-height:24px;"></div>
 
-        <!-- 画板区域 (画手可见) -->
         <div id="draw-board-area" style="display:none;flex-direction:column;gap:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-size:14px;color:#9bb8da;">请画出：<strong id="draw-target-word" style="color:#4ade80;font-size:18px;letter-spacing:1px;"></strong></span>
@@ -1745,7 +1742,6 @@ function startDrawGame(container) {
           </div>
         </div>
 
-        <!-- 猜词区域 (猜的人可见) -->
         <div id="draw-guess-area" style="display:none;flex-direction:column;gap:10px;">
           <div style="background:#fff;border-radius:16px;overflow:hidden;aspect-ratio:4/3;box-shadow:0 8px 20px rgba(0,0,0,.5);position:relative;">
             <img id="draw-image-display" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;">
@@ -1755,11 +1751,10 @@ function startDrawGame(container) {
           </div>
           <div style="display:flex;gap:8px;">
             <input type="text" id="draw-guess-input" placeholder="输入你的猜测..." style="flex:1;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.1);border-radius:60px;padding:12px 20px;color:#fff;outline:none;">
-            <button id="draw-guess-btn" style="background:#3b82f6;border:none;border-radius:60px;padding:12px 24px;color:#fff;font-weight:600;cursor:pointer;">提交</button>
+            <button id="draw-guess-btn" class="draw-btn">提交</button>
           </div>
           <div id="draw-messages" style="font-size:13px;color:#9bb8da;text-align:center;min-height:20px;"></div>
         </div>
-
       </div>
     </div>
   `;
@@ -1782,10 +1777,116 @@ function bindDrawEvents(container) {
   const waitingOverlay = document.getElementById('draw-waiting-overlay');
   const messagesEl = document.getElementById('draw-messages');
 
+  // 核心渲染函数
+  function renderRoomData(room) {
+    if (!room || lastRoomData === JSON.stringify(room)) return;
+    lastRoomData = JSON.stringify(room);
+
+    let playersHtml = '';
+    Object.keys(room.players || {}).forEach(uid => {
+      const p = room.players[uid];
+      playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawer_id) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
+    });
+    playersEl.innerHTML = playersHtml;
+
+    const isDrawer = String(room.drawer_id) === String(user.memberId);
+
+    if (room.status === 'drawing') {
+      statusEl.textContent = `第 ${room.round} 轮：${room.drawer_name} 正在作画`;
+      
+      const guessInput = document.getElementById('draw-guess-input');
+      const guessBtn = document.getElementById('draw-guess-btn');
+      if (guessInput) { guessInput.style.display = 'block'; guessInput.value = ''; }
+      if (guessBtn) guessBtn.style.display = 'block';
+      messagesEl.innerHTML = '';
+
+      if (isDrawer) {
+        boardArea.style.display = 'flex';
+        guessArea.style.display = 'none';
+        targetWordEl.textContent = room.word;
+        if (canvas.width === 0) initCanvas(); // 只初始化一次
+      } else {
+        boardArea.style.display = 'none';
+        guessArea.style.display = 'flex';
+        waitingOverlay.style.display = 'flex';
+        waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
+      }
+    } else if (room.status === 'guessing') {
+      statusEl.textContent = `请猜猜画的是什么？`;
+      
+      const guessInput = document.getElementById('draw-guess-input');
+      const guessBtn = document.getElementById('draw-guess-btn');
+
+      boardArea.style.display = 'none';
+      guessArea.style.display = 'flex';
+      imageDisplay.src = room.image_data || '';
+
+      if (isDrawer) {
+        waitingOverlay.style.display = 'none';
+        if (guessInput) guessInput.style.display = 'none';
+        if (guessBtn) guessBtn.style.display = 'none';
+        messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
+      } else {
+        waitingOverlay.style.display = 'none';
+        if (guessInput) guessInput.style.display = 'block';
+        if (guessBtn) guessBtn.style.display = 'block';
+      }
+    } else if (room.status === 'result') {
+      statusEl.textContent = `本轮结束！答案是：${room.word}`;
+      if (!isDrawer) {
+        messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
+      }
+      
+      if (isDrawer && !room.next_round_started) {
+        // 通知服务器开启下一轮
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...room, next_round_started: true })
+        }).then(() => {
+          setTimeout(async () => {
+            const playerIds = Object.keys(room.players || {});
+            if (playerIds.length === 0) return;
+            
+            const currentIndex = playerIds.indexOf(String(room.drawer_id));
+            const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
+            const nextDrawer = room.players[nextDrawerId];
+            
+            await fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...room,
+                status: 'drawing',
+                drawer_id: nextDrawerId,
+                drawer_name: nextDrawer.name,
+                word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
+                image_data: '',
+                round: room.round + 1,
+                next_round_started: false
+              })
+            });
+          }, 3000);
+        });
+      }
+    }
+  }
+
+  // 轮询拉取房间数据
+  function pollRoom() {
+    if (!drawRoomId) return;
+    fetch(`${WORKER_URL}?id=${drawRoomId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.id) renderRoomData(data);
+      })
+      .catch(err => console.log('轮询失败', err));
+  }
+
   document.getElementById('draw-create-btn').onclick = async () => {
     const roomId = String(Math.floor(1000 + Math.random() * 9000));
     
-    const { error } = await supabaseClient.from('rooms').insert([{
+    const newRoom = {
       id: roomId,
       status: 'drawing',
       drawer_id: String(user.memberId),
@@ -1795,36 +1896,45 @@ function bindDrawEvents(container) {
       players: { [user.memberId]: { name: user.nickname || user.originalName, score: 0 } },
       round: 1,
       next_round_started: false
-    }]);
+    };
 
-    if (error) {
-      alert('创建房间失败，请检查表结构和 RLS：' + error.message);
-    } else {
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRoom)
+      });
+      if (!res.ok) throw new Error('创建失败');
       joinDrawRoom(roomId);
+    } catch(e) {
+      alert('创建房间失败，请检查网络');
     }
   };
 
   document.getElementById('draw-join-btn').onclick = async () => {
-    // 加入时强制转小写，匹配建房间的逻辑
-    const roomId = document.getElementById('draw-room-input').value.trim().toLowerCase();
+    const roomId = document.getElementById('draw-room-input').value.trim();
     if (!roomId) return alert('请输入房间号');
     
-    const { data, error } = await supabaseClient.from('rooms').select('*').eq('id', roomId).maybeSingle();
-    
-    if (error) return alert('查询房间失败：' + error.message);
-    if (!data) return alert('房间不存在');
-
-    let players = data.players || {};
-    players[user.memberId] = {
-      name: user.nickname || user.originalName,
-      score: players[user.memberId]?.score || 0
-    };
-    
-    const { error: updateError } = await supabaseClient.from('rooms').update({ players }).eq('id', roomId);
-    if (updateError) {
-      alert('加入失败：' + updateError.message);
-    } else {
+    try {
+      const res = await fetch(`${WORKER_URL}?id=${roomId}`);
+      if (!res.ok) throw new Error('房间不存在');
+      const data = await res.json();
+      
+      let players = data.players || {};
+      players[user.memberId] = {
+        name: user.nickname || user.originalName,
+        score: players[user.memberId]?.score || 0
+      };
+      
+      await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, players })
+      });
+      
       joinDrawRoom(roomId);
+    } catch(e) {
+      alert('加入失败，房间可能不存在或已过期');
     }
   };
 
@@ -1864,12 +1974,14 @@ function bindDrawEvents(container) {
   canvas.addEventListener('touchend', (e) => { e.preventDefault(); isDrawing = false; }, {passive:false});
 
   document.getElementById('draw-submit-btn').onclick = async () => {
-    const imageData = canvas.toDataURL('image/jpeg', 0.5);
+    const imageData = canvas.toDataURL('image/jpeg', 0.4); // 降低画质节省流量
+    const data = await (await fetch(`${WORKER_URL}?id=${drawRoomId}`)).json();
     
-    await supabaseClient.from('rooms').update({
-      image_data: imageData,
-      status: 'guessing'
-    }).eq('id', drawRoomId);
+    await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...data, image_data: imageData, status: 'guessing' })
+    });
     
     boardArea.style.display = 'none';
     guessArea.style.display = 'flex';
@@ -1884,20 +1996,18 @@ function bindDrawEvents(container) {
     const val = document.getElementById('draw-guess-input').value.trim();
     if (!val) return;
     
-    const { data, error } = await supabaseClient.from('rooms').select('*').eq('id', drawRoomId).single();
-    if (error) return;
-
+    const data = await (await fetch(`${WORKER_URL}?id=${drawRoomId}`)).json();
     if (data.word === val) {
       document.getElementById('draw-guess-input').value = '';
-      
       let players = data.players || {};
       if (!players[user.memberId]) players[user.memberId] = {};
       players[user.memberId].score = (players[user.memberId].score || 0) + 10;
       
-      await supabaseClient.from('rooms').update({
-        players: players,
-        status: 'result'
-      }).eq('id', drawRoomId);
+      await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, players, status: 'result' })
+      });
       
       messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 你猜对了！答案是「${val}」</span>`;
     } else {
@@ -1911,121 +2021,36 @@ function bindDrawEvents(container) {
     lobbyEl.style.display = 'none';
     roomEl.style.display = 'flex';
     roomIdDisplay.textContent = roomId;
+    lastRoomData = null; // 重置一下状态
 
-    const myUser = loadUser();
-    const myId = myUser.memberId;
+    if (drawInterval) clearInterval(drawInterval);
+    
+    // 先手动拉取一次
+    pollRoom();
+    
+    // 每2秒拉取一次最新状态
+    drawInterval = setInterval(pollRoom, 2000);
 
-    if (drawChannel) supabaseClient.removeChannel(drawChannel);
-
-    // ★ 核心修复：抽离渲染函数，解决首次进入房间没画面的问题
-    function renderRoomData(room) {
-      let playersHtml = '';
-      Object.keys(room.players || {}).forEach(uid => {
-        const p = room.players[uid];
-        playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawer_id) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
-      });
-      playersEl.innerHTML = playersHtml;
-
-      const isDrawer = String(room.drawer_id) === String(myId);
-
-      if (room.status === 'drawing') {
-        statusEl.textContent = `第 ${room.round} 轮：${room.drawer_name} 正在作画`;
-        
-        const guessInput = document.getElementById('draw-guess-input');
-        const guessBtn = document.getElementById('draw-guess-btn');
-        if (guessInput) { guessInput.style.display = 'block'; guessInput.value = ''; }
-        if (guessBtn) guessBtn.style.display = 'block';
-        messagesEl.innerHTML = '';
-
-        if (isDrawer) {
-          boardArea.style.display = 'flex';
-          guessArea.style.display = 'none';
-          targetWordEl.textContent = room.word;
-          setTimeout(initCanvas, 50);
-        } else {
-          boardArea.style.display = 'none';
-          guessArea.style.display = 'flex';
-          waitingOverlay.style.display = 'flex';
-          waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
-        }
-      } else if (room.status === 'guessing') {
-        statusEl.textContent = `请猜猜画的是什么？`;
-        
-        const guessInput = document.getElementById('draw-guess-input');
-        const guessBtn = document.getElementById('draw-guess-btn');
-
-        boardArea.style.display = 'none';
-        guessArea.style.display = 'flex';
-        imageDisplay.src = room.image_data || '';
-
-        if (isDrawer) {
-          waitingOverlay.style.display = 'none';
-          if (guessInput) guessInput.style.display = 'none';
-          if (guessBtn) guessBtn.style.display = 'none';
-          messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
-        } else {
-          waitingOverlay.style.display = 'none';
-          if (guessInput) guessInput.style.display = 'block';
-          if (guessBtn) guessBtn.style.display = 'block';
-        }
-      } else if (room.status === 'result') {
-        statusEl.textContent = `本轮结束！答案是：${room.word}`;
-        if (!isDrawer) {
-          messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
-        }
-        
-        if (isDrawer && !room.next_round_started) {
-          supabaseClient.from('rooms').update({ next_round_started: true }).eq('id', roomId).then(() => {
-            setTimeout(async () => {
-              const playerIds = Object.keys(room.players || {});
-              if (playerIds.length === 0) return;
-              
-              const currentIndex = playerIds.indexOf(String(room.drawer_id));
-              const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
-              const nextDrawer = room.players[nextDrawerId];
-              
-              await supabaseClient.from('rooms').update({
-                status: 'drawing',
-                drawer_id: nextDrawerId,
-                drawer_name: nextDrawer.name,
-                word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
-                image_data: '',
-                round: room.round + 1,
-                next_round_started: false
-              }).eq('id', roomId);
-            }, 3000);
-          });
-        }
-      }
-    }
-
-    // 1. 首次进入手动拉取一次数据并渲染
-    supabaseClient.from('rooms').select('*').eq('id', roomId).single().then(({ data }) => {
-      if (data) renderRoomData(data);
-    });
-
-    // 2. 开启实时监听
-    drawChannel = supabaseClient.channel('room_' + roomId)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, payload => {
-        renderRoomData(payload.new);
-      })
-      .subscribe();
-
-    // 3. 退出清理
+    // 退出清理
     drawCleanup = async () => {
-      if (drawChannel) {
-        supabaseClient.removeChannel(drawChannel);
-        drawChannel = null;
+      if (drawInterval) {
+        clearInterval(drawInterval);
+        drawInterval = null;
       }
-      
-      const { data } = await supabaseClient.from('rooms').select('*').eq('id', roomId).maybeSingle();
-      if (data) {
-        let players = data.players || {};
-        if (players[myId]) {
-          delete players[myId];
-          await supabaseClient.from('rooms').update({ players: players }).eq('id', roomId);
+      try {
+        const data = await (await fetch(`${WORKER_URL}?id=${roomId}`)).json();
+        if (data && data.players) {
+          let players = data.players || {};
+          if (players[user.memberId]) {
+            delete players[user.memberId];
+            await fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...data, players })
+            });
+          }
         }
-      }
+      } catch(e){}
       drawRoomId = null;
     };
   };
