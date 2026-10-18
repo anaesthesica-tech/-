@@ -1689,14 +1689,11 @@ function startGuessGame(container) {
    ============================================================ */
 const SUPABASE_URL = "https://eivnadghuybcztdaygwv.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpdm5hZGdodXliY3p0ZGF5Z3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyOTY0NzQsImV4cCI6MjEwNzg3MjQ3NH0.4LzNnqAEEKM8tXZghDlIN2C86hnMetK9nq9ZxPaQNhg";
-
-// 初始化 Supabase (注意这里取了 window.supabase 里的 createClient)
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const DRAW_WORDS = ['苹果', '太阳', '小狗', '汽车', '大树', '房子', '雨伞', '眼镜', '手机', '电视', '鼠标', '键盘', '帽子', '鞋子', '花朵', '大象', '长颈鹿', '冰淇淋', '汉堡', '西瓜'];
 
 let drawRoomId = null;
-let drawPolling = null;
 let canvasCtx = null;
 let isDrawing = false;
 let drawCleanup = null;
@@ -1715,7 +1712,7 @@ function startDrawGame(container) {
         <p style="font-size:13px;color:#9bb8da;margin-bottom:20px;">房间号分享给群友，即可一起游玩</p>
         
         <div style="display:flex;gap:8px;">
-          <input type="text" id="draw-room-input" placeholder="输入房间号" style="flex:1;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.1);border-radius:60px;padding:12px 20px;color:#fff;outline:none;text-align:center;text-transform:uppercase;">
+          <input type="text" id="draw-room-input" placeholder="输入房间号" style="flex:1;background:rgba(0,0,0,.35);border:1.5px solid rgba(255,255,255,.1);border-radius:60px;padding:12px 20px;color:#fff;outline:none;text-align:center;">
           <button id="draw-join-btn" style="background:#3b82f6;border:none;border-radius:60px;padding:12px 24px;color:#fff;font-weight:600;cursor:pointer;">加入</button>
         </div>
         
@@ -1786,9 +1783,8 @@ function bindDrawEvents(container) {
   const messagesEl = document.getElementById('draw-messages');
 
   document.getElementById('draw-create-btn').onclick = async () => {
-const roomId = String(Math.floor(1000 + Math.random() * 9000)); 
+    const roomId = String(Math.floor(1000 + Math.random() * 9000));
     
-    // 使用 Supabase 建房间
     const { error } = await supabaseClient.from('rooms').insert([{
       id: roomId,
       status: 'drawing',
@@ -1809,7 +1805,8 @@ const roomId = String(Math.floor(1000 + Math.random() * 9000));
   };
 
   document.getElementById('draw-join-btn').onclick = async () => {
-    const roomId = document.getElementById('draw-room-input').value.trim().toUpperCase();
+    // 加入时强制转小写，匹配建房间的逻辑
+    const roomId = document.getElementById('draw-room-input').value.trim().toLowerCase();
     if (!roomId) return alert('请输入房间号');
     
     const { data, error } = await supabaseClient.from('rooms').select('*').eq('id', roomId).maybeSingle();
@@ -1920,93 +1917,101 @@ const roomId = String(Math.floor(1000 + Math.random() * 9000));
 
     if (drawChannel) supabaseClient.removeChannel(drawChannel);
 
-    // Supabase 实时监听 (Realtime)
-    drawChannel = supabaseClient.channel('room_' + roomId)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, payload => {
-        const room = payload.new;
+    // ★ 核心修复：抽离渲染函数，解决首次进入房间没画面的问题
+    function renderRoomData(room) {
+      let playersHtml = '';
+      Object.keys(room.players || {}).forEach(uid => {
+        const p = room.players[uid];
+        playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawer_id) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
+      });
+      playersEl.innerHTML = playersHtml;
+
+      const isDrawer = String(room.drawer_id) === String(myId);
+
+      if (room.status === 'drawing') {
+        statusEl.textContent = `第 ${room.round} 轮：${room.drawer_name} 正在作画`;
         
-        let playersHtml = '';
-        Object.keys(room.players || {}).forEach(uid => {
-          const p = room.players[uid];
-          playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawer_id) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
-        });
-        playersEl.innerHTML = playersHtml;
+        const guessInput = document.getElementById('draw-guess-input');
+        const guessBtn = document.getElementById('draw-guess-btn');
+        if (guessInput) { guessInput.style.display = 'block'; guessInput.value = ''; }
+        if (guessBtn) guessBtn.style.display = 'block';
+        messagesEl.innerHTML = '';
 
-        const isDrawer = String(room.drawer_id) === String(myId);
-
-        if (room.status === 'drawing') {
-          statusEl.textContent = `第 ${room.round} 轮：${room.drawer_name} 正在作画`;
-          
-          const guessInput = document.getElementById('draw-guess-input');
-          const guessBtn = document.getElementById('draw-guess-btn');
-          if (guessInput) { guessInput.style.display = 'block'; guessInput.value = ''; }
-          if (guessBtn) guessBtn.style.display = 'block';
-          messagesEl.innerHTML = '';
-
-          if (isDrawer) {
-            boardArea.style.display = 'flex';
-            guessArea.style.display = 'none';
-            targetWordEl.textContent = room.word;
-            setTimeout(initCanvas, 50);
-          } else {
-            boardArea.style.display = 'none';
-            guessArea.style.display = 'flex';
-            waitingOverlay.style.display = 'flex';
-            waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
-          }
-        } else if (room.status === 'guessing') {
-          statusEl.textContent = `请猜猜画的是什么？`;
-          
-          const guessInput = document.getElementById('draw-guess-input');
-          const guessBtn = document.getElementById('draw-guess-btn');
-
+        if (isDrawer) {
+          boardArea.style.display = 'flex';
+          guessArea.style.display = 'none';
+          targetWordEl.textContent = room.word;
+          setTimeout(initCanvas, 50);
+        } else {
           boardArea.style.display = 'none';
           guessArea.style.display = 'flex';
-          imageDisplay.src = room.image_data || '';
-
-          if (isDrawer) {
-            waitingOverlay.style.display = 'none';
-            if (guessInput) guessInput.style.display = 'none';
-            if (guessBtn) guessBtn.style.display = 'none';
-            messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
-          } else {
-            waitingOverlay.style.display = 'none';
-            if (guessInput) guessInput.style.display = 'block';
-            if (guessBtn) guessBtn.style.display = 'block';
-          }
-        } else if (room.status === 'result') {
-          statusEl.textContent = `本轮结束！答案是：${room.word}`;
-          if (!isDrawer) {
-            messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
-          }
-          
-          if (isDrawer && !room.next_round_started) {
-            supabaseClient.from('rooms').update({ next_round_started: true }).eq('id', roomId).then(() => {
-              setTimeout(async () => {
-                const playerIds = Object.keys(room.players || {});
-                if (playerIds.length === 0) return;
-                
-                const currentIndex = playerIds.indexOf(String(room.drawer_id));
-                const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
-                const nextDrawer = room.players[nextDrawerId];
-                
-                await supabaseClient.from('rooms').update({
-                  status: 'drawing',
-                  drawer_id: nextDrawerId,
-                  drawer_name: nextDrawer.name,
-                  word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
-                  image_data: '',
-                  round: room.round + 1,
-                  next_round_started: false
-                }).eq('id', roomId);
-              }, 3000);
-            });
-          }
+          waitingOverlay.style.display = 'flex';
+          waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
         }
+      } else if (room.status === 'guessing') {
+        statusEl.textContent = `请猜猜画的是什么？`;
+        
+        const guessInput = document.getElementById('draw-guess-input');
+        const guessBtn = document.getElementById('draw-guess-btn');
+
+        boardArea.style.display = 'none';
+        guessArea.style.display = 'flex';
+        imageDisplay.src = room.image_data || '';
+
+        if (isDrawer) {
+          waitingOverlay.style.display = 'none';
+          if (guessInput) guessInput.style.display = 'none';
+          if (guessBtn) guessBtn.style.display = 'none';
+          messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
+        } else {
+          waitingOverlay.style.display = 'none';
+          if (guessInput) guessInput.style.display = 'block';
+          if (guessBtn) guessBtn.style.display = 'block';
+        }
+      } else if (room.status === 'result') {
+        statusEl.textContent = `本轮结束！答案是：${room.word}`;
+        if (!isDrawer) {
+          messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
+        }
+        
+        if (isDrawer && !room.next_round_started) {
+          supabaseClient.from('rooms').update({ next_round_started: true }).eq('id', roomId).then(() => {
+            setTimeout(async () => {
+              const playerIds = Object.keys(room.players || {});
+              if (playerIds.length === 0) return;
+              
+              const currentIndex = playerIds.indexOf(String(room.drawer_id));
+              const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
+              const nextDrawer = room.players[nextDrawerId];
+              
+              await supabaseClient.from('rooms').update({
+                status: 'drawing',
+                drawer_id: nextDrawerId,
+                drawer_name: nextDrawer.name,
+                word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
+                image_data: '',
+                round: room.round + 1,
+                next_round_started: false
+              }).eq('id', roomId);
+            }, 3000);
+          });
+        }
+      }
+    }
+
+    // 1. 首次进入手动拉取一次数据并渲染
+    supabaseClient.from('rooms').select('*').eq('id', roomId).single().then(({ data }) => {
+      if (data) renderRoomData(data);
+    });
+
+    // 2. 开启实时监听
+    drawChannel = supabaseClient.channel('room_' + roomId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, payload => {
+        renderRoomData(payload.new);
       })
       .subscribe();
 
-    // 退出时清理监听
+    // 3. 退出清理
     drawCleanup = async () => {
       if (drawChannel) {
         supabaseClient.removeChannel(drawChannel);
