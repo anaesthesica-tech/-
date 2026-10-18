@@ -6,9 +6,9 @@
 <title>喵喵</title>
 <!-- Three.js CDN (跳一跳用到) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+<!-- 腾讯云开发 CloudBase SDK -->
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+
 <style>
   * { margin:0; padding:0; box-sizing:border-box; font-family: system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif; }
   html, body { width:100%; height:100%; }
@@ -952,12 +952,7 @@ function openGame(game) {
 
 document.getElementById('backToGames').addEventListener('click', () => {
   if (jumpCleanup) { jumpCleanup(); jumpCleanup = null; }
-  if (drawRoomId && fbDb) {
-    const user = loadUser();
-    if (user) fbDb.ref(`draw_rooms/${drawRoomId}/players/${user.memberId}`).remove();
-    fbDb.ref('draw_rooms/' + drawRoomId).off();
-    drawRoomId = null;
-  }
+  if (drawCleanup) { drawCleanup(); drawCleanup = null; }
   showScreen('screen-platform');
   switchTab('games');
 });
@@ -1060,12 +1055,7 @@ document.getElementById('saveEdit').addEventListener('click', () => {
 document.getElementById('logoutBtn').addEventListener('click', () => {
   if (!confirm('确定退出登录吗？')) return;
   if (jumpCleanup) { jumpCleanup(); jumpCleanup = null; }
-  if (drawRoomId && fbDb) {
-    const user = loadUser();
-    if (user) fbDb.ref(`draw_rooms/${drawRoomId}/players/${user.memberId}`).remove();
-    fbDb.ref('draw_rooms/' + drawRoomId).off();
-    drawRoomId = null;
-  }
+  if (drawCleanup) { drawCleanup(); drawCleanup = null; }
   clearUser();
   currentMember = null;
   showScreen('screen-verify');
@@ -1689,29 +1679,13 @@ function startGuessGame(container) {
 }
 
 /* ============================================================
-   ★★★ Firebase 初始化 & 你画我猜（竞猜模式） ★★★
+   ★★★ 腾讯云开发 CloudBase 初始化 & 你画我猜 ★★★
    ============================================================ */
-const firebaseConfig = {
-  apiKey: "AIzaSyBLXd4lpOMB8Ey29TWkl0u9brN8djXIvRc",
-  authDomain: "draw-and-guess-c22c5.firebaseapp.com",
-  databaseURL: "https://draw-and-guess-c22c5-default-rtdb.asia-southeast1.firebasedatabase.app/",
-  projectId: "draw-and-guess-c22c5",
-  storageBucket: "draw-and-guess-c22c5.firebasestorage.app",
-  messagingSenderId: "892562851165",
-  appId: "1:892562851165:web:32a2aaa6348abdc3e254b4"
-};
-
-let fbApp = null;
-let fbDb = null;
-
-try {
-  if (typeof firebase !== 'undefined') {
-    fbApp = firebase.initializeApp(firebaseConfig);
-    fbDb = firebase.database();
-  }
-} catch(e) {
-  console.warn('Firebase 初始化失败，请检查配置或网络', e);
-}
+const app = cloudbase.init({
+  env: "index-d8g76ivyhe861024d", 
+  accessKey: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjlkMWRjMzFlLWI0ZDAtNDQ4Yi1hNzZmLWIwY2M2M2Q4MTQ5OCJ9.eyJpc3MiOiJodHRwczovL2luZGV4LWQ4Zzc2aXZ5aGU4NjEwMjRkLmFwLXNoYW5naGFpLnRjYi1hcGkudGVuY2VudGNsb3VkYXBpLmNvbSIsInN1YiI6ImFub24iLCJhdWQiOiJpbmRleC1kOGc3Nml2eWhlODYxMDI0ZCIsImV4cCI6NDA5NTk4MDU3NSwiaWF0IjoxNzkyMjk3Mzc1LCJub25jZSI6IlFiWmE4UjcxUTB1cFhuVUd5SjBJa3ciLCJhdF9oYXNoIjoiUWJaYThSNzFRMHVwWG5VR3lKMElrdyIsIm5hbWUiOiJBbm9ueW1vdXMiLCJzY29wZSI6ImFub255bW91cyIsInByb2plY3RfaWQiOiJpbmRleC1kOGc3Nml2eWhlODYxMDI0ZCIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJ1c2VyX3R5cGUiOiIiLCJjbGllbnRfdHlwZSI6ImNsaWVudF91c2VyIiwiaXNfc3lzdGVtX2FkbWluIjpmYWxzZX0.CfUDICtBZpo4HnDKGuiXay1CETGIwQp0oVHQhqlCiOPpD3GEoBgMBqzyaGOwlc73QtD9on2eTXGiR8F7v3iNaosY6p49ZlzCQSFo1fJ5cz786e0FrrktfZHfric6wxw1E8hq6aWMahwB2ZmIksO7OPwhnDpIM2-uirhzmyRKXhZDk8BElg66PxXvATbaUwBY7ZOlbW56n0W-VG2SKi3POs_Ah87uwgOsbYd8wfRWDFHR46OKFYTmFw976asxPcMB2Z8EvhwQWClr788VCIRYvnonr4GBVpcbNqWOXHUHrKWNVAAivYnVAYGv_72SCPqIRaKUFrcd9RIQwbrr1LJ0Wg"
+});
+const db = app.database();
 
 const DRAW_WORDS = ['苹果', '太阳', '小狗', '汽车', '大树', '房子', '雨伞', '眼镜', '手机', '电视', '鼠标', '键盘', '帽子', '鞋子', '花朵', '大象', '长颈鹿', '冰淇淋', '汉堡', '西瓜'];
 
@@ -1720,13 +1694,9 @@ let drawPolling = null;
 let canvasCtx = null;
 let isDrawing = false;
 let drawCleanup = null;
+let drawWatcher = null;
 
 function startDrawGame(container) {
-  if (!fbDb) {
-    container.innerHTML = '<div style="padding:20px;text-align:center;color:#f87171;">未连接到 Firebase，请检查配置和网络。</div>';
-    return;
-  }
-
   const user = loadUser();
   if (!user) return;
 
@@ -1811,17 +1781,21 @@ function bindDrawEvents(container) {
 
   document.getElementById('draw-create-btn').onclick = () => {
     const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const roomRef = fbDb.ref('draw_rooms/' + roomId);
-    roomRef.set({
+    
+    // 腾讯云 CloudBase 建房间
+    db.collection('rooms').doc(roomId).set({
       status: 'drawing',
-      drawerId: user.memberId,
+      drawerId: String(user.memberId),
       drawerName: user.nickname || user.originalName,
       word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
       imageData: '',
       players: { [user.memberId]: { name: user.nickname || user.originalName, score: 0 } },
-      round: 1
+      round: 1,
+      nextRoundStarted: false
     }).then(() => {
       joinDrawRoom(roomId);
+    }).catch(err => {
+      alert('创建房间失败，请检查数据库权限。' + err.message);
     });
   };
 
@@ -1829,25 +1803,26 @@ function bindDrawEvents(container) {
     const roomId = document.getElementById('draw-room-input').value.trim().toUpperCase();
     if (!roomId) return alert('请输入房间号');
     
-    fbDb.ref('draw_rooms/' + roomId).once('value').then(snapshot => {
-      if (!snapshot.exists()) return alert('房间不存在');
-      const data = snapshot.val();
-      // 允许随时加入，直接覆盖分数为 0（或者保留之前的）
-      fbDb.ref(`draw_rooms/${roomId}/players/${user.memberId}`).set({
+    db.collection('rooms').doc(roomId).get().then(res => {
+      if (!res.data || res.data.length === 0) return alert('房间不存在');
+      const data = res.data[0];
+      
+      let players = data.players || {};
+      players[user.memberId] = {
         name: user.nickname || user.originalName,
-        score: data.players?.[user.memberId]?.score || 0
-      }).then(() => {
+        score: players[user.memberId]?.score || 0
+      };
+      
+      db.collection('rooms').doc(roomId).update({ players: players }).then(() => {
         joinDrawRoom(roomId);
       });
+    }).catch(err => {
+      alert('加入失败：' + err.message);
     });
   };
 
   document.getElementById('draw-leave-btn').onclick = () => {
-    if (drawRoomId) {
-      fbDb.ref(`draw_rooms/${drawRoomId}/players/${user.memberId}`).remove();
-      fbDb.ref('draw_rooms/' + drawRoomId).off();
-      drawRoomId = null;
-    }
+    if (drawCleanup) drawCleanup();
     lobbyEl.style.display = 'flex';
     roomEl.style.display = 'none';
   };
@@ -1883,12 +1858,17 @@ function bindDrawEvents(container) {
 
   document.getElementById('draw-submit-btn').onclick = () => {
     const imageData = canvas.toDataURL('image/jpeg', 0.5);
-    fbDb.ref(`draw_rooms/${drawRoomId}/imageData`).set(imageData);
-    fbDb.ref(`draw_rooms/${drawRoomId}/status`).set('guessing');
-    boardArea.style.display = 'none';
-    guessArea.style.display = 'flex';
-    waitingOverlay.style.display = 'flex';
-    waitingOverlay.innerHTML = '<span>等待其他玩家猜词...</span>';
+    
+    // 腾讯云更新
+    db.collection('rooms').doc(drawRoomId).update({
+      imageData: imageData,
+      status: 'guessing'
+    }).then(() => {
+      boardArea.style.display = 'none';
+      guessArea.style.display = 'flex';
+      waitingOverlay.style.display = 'flex';
+      waitingOverlay.innerHTML = '<span>等待其他玩家猜词...</span>';
+    });
   };
 
   document.getElementById('draw-guess-btn').onclick = submitGuess;
@@ -1898,14 +1878,22 @@ function bindDrawEvents(container) {
     const val = document.getElementById('draw-guess-input').value.trim();
     if (!val) return;
     
-    fbDb.ref(`draw_rooms/${drawRoomId}`).once('value').then(snapshot => {
-      const room = snapshot.val();
+    db.collection('rooms').doc(drawRoomId).get().then(res => {
+      const room = res.data[0];
       if (room.word === val) {
         document.getElementById('draw-guess-input').value = '';
-        const scoreRef = fbDb.ref(`draw_rooms/${drawRoomId}/players/${user.memberId}/score`);
-        scoreRef.transaction(current => (current || 0) + 10);
+        
+        // 加分
+        let players = room.players || {};
+        if (!players[user.memberId]) players[user.memberId] = {};
+        players[user.memberId].score = (players[user.memberId].score || 0) + 10;
+        
+        db.collection('rooms').doc(drawRoomId).update({
+          players: players,
+          status: 'result'
+        });
+        
         messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 你猜对了！答案是「${val}」</span>`;
-        fbDb.ref(`draw_rooms/${drawRoomId}/status`).set('result');
       } else {
         messagesEl.innerHTML = `<span style="color:#f87171;">「${val}」不对哦，再试试</span>`;
         document.getElementById('draw-guess-input').value = '';
@@ -1919,85 +1907,117 @@ function bindDrawEvents(container) {
     roomEl.style.display = 'flex';
     roomIdDisplay.textContent = roomId;
 
-    const roomRef = fbDb.ref('draw_rooms/' + roomId);
-    roomRef.on('value', snapshot => {
-      const room = snapshot.val();
-      if (!room) {
-        // 房间被删了
-        lobbyEl.style.display = 'flex';
-        roomEl.style.display = 'none';
-        return;
-      }
+    const myUser = loadUser();
+    const myId = myUser.memberId;
 
-      let playersHtml = '';
-      Object.keys(room.players || {}).forEach(uid => {
-        const p = room.players[uid];
-        playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawerId) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
-      });
-      playersEl.innerHTML = playersHtml;
+    // 腾讯云实时监听 (watch)
+    if (drawWatcher) drawWatcher.close();
+    drawWatcher = db.collection('rooms').doc(roomId).watch({
+      onChange: function(snapshot) {
+        if (snapshot.docs.length === 0) return;
+        const room = snapshot.docs[0];
+        
+        let playersHtml = '';
+        Object.keys(room.players || {}).forEach(uid => {
+          const p = room.players[uid];
+          playersHtml += `<span style="background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;${String(uid) === String(room.drawerId) ? 'border:1px solid #f59e0b;' : ''}">${p.name} (${p.score || 0}分)</span>`;
+        });
+        playersEl.innerHTML = playersHtml;
 
-      const isDrawer = String(room.drawerId) === String(user.memberId);
+        const isDrawer = String(room.drawerId) === String(myId);
 
-      if (room.status === 'drawing') {
-        statusEl.textContent = `第 ${room.round} 轮：${room.drawerName} 正在作画`;
-        if (isDrawer) {
-          boardArea.style.display = 'flex';
-          guessArea.style.display = 'none';
-          targetWordEl.textContent = room.word;
-          setTimeout(initCanvas, 50);
-        } else {
+        if (room.status === 'drawing') {
+          statusEl.textContent = `第 ${room.round} 轮：${room.drawerName} 正在作画`;
+          
+          const guessInput = document.getElementById('draw-guess-input');
+          const guessBtn = document.getElementById('draw-guess-btn');
+          if (guessInput) { guessInput.style.display = 'block'; guessInput.value = ''; }
+          if (guessBtn) guessBtn.style.display = 'block';
+          messagesEl.innerHTML = '';
+
+          if (isDrawer) {
+            boardArea.style.display = 'flex';
+            guessArea.style.display = 'none';
+            targetWordEl.textContent = room.word;
+            setTimeout(initCanvas, 50);
+          } else {
+            boardArea.style.display = 'none';
+            guessArea.style.display = 'flex';
+            waitingOverlay.style.display = 'flex';
+            waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
+          }
+        } else if (room.status === 'guessing') {
+          statusEl.textContent = `请猜猜画的是什么？`;
+          
+          const guessInput = document.getElementById('draw-guess-input');
+          const guessBtn = document.getElementById('draw-guess-btn');
+
           boardArea.style.display = 'none';
           guessArea.style.display = 'flex';
-          waitingOverlay.style.display = 'flex';
-          waitingOverlay.innerHTML = '<span>画手正在作画...</span>';
-        }
-         } else if (room.status === 'guessing') {
-        statusEl.textContent = `请猜猜画的是什么？`;
-        
-        // 获取输入框和按钮的 DOM
-        const guessInput = document.getElementById('draw-guess-input');
-        const guessBtn = document.getElementById('draw-guess-btn');
+          imageDisplay.src = room.imageData || '';
 
-        boardArea.style.display = 'none';
-        guessArea.style.display = 'flex';
-        imageDisplay.src = room.imageData || '';
-
-        if (isDrawer) {
-          waitingOverlay.style.display = 'none';
-          if (guessInput) guessInput.style.display = 'none';
-          if (guessBtn) guessBtn.style.display = 'none';
-          messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
-        } else {
-          waitingOverlay.style.display = 'none';
-          if (guessInput) guessInput.style.display = 'block';
-          if (guessBtn) guessBtn.style.display = 'block';
-        }
-      } else if (room.status === 'result') {
-        statusEl.textContent = `本轮结束！答案是：${room.word}`;
-        if (!isDrawer) {
-          messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
-        }
-        if (!room.nextRoundTimeout && isDrawer) {
-          room.nextRoundTimeout = true;
-          setTimeout(() => {
-            const playerIds = Object.keys(room.players);
-            if(playerIds.length === 0) return;
-            const nextDrawerId = playerIds[(playerIds.indexOf(String(room.drawerId)) + 1) % playerIds.length];
-            const nextDrawer = room.players[nextDrawerId];
-            
-            fbDb.ref('draw_rooms/' + roomId).update({
-              status: 'drawing',
-              drawerId: nextDrawerId,
-              drawerName: nextDrawer.name,
-              word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
-              imageData: '',
-              round: room.round + 1,
-              nextRoundTimeout: null
+          if (isDrawer) {
+            waitingOverlay.style.display = 'none';
+            if (guessInput) guessInput.style.display = 'none';
+            if (guessBtn) guessBtn.style.display = 'none';
+            messagesEl.innerHTML = '<span style="color:#9bb8da;">你是画手，请等待其他人猜词...</span>';
+          } else {
+            waitingOverlay.style.display = 'none';
+            if (guessInput) guessInput.style.display = 'block';
+            if (guessBtn) guessBtn.style.display = 'block';
+          }
+        } else if (room.status === 'result') {
+          statusEl.textContent = `本轮结束！答案是：${room.word}`;
+          if (!isDrawer) {
+            messagesEl.innerHTML = `<span style="color:#4ade80;font-weight:bold;">🎉 有人猜对了！</span>`;
+          }
+          
+          if (isDrawer && !room.nextRoundStarted) {
+            db.collection('rooms').doc(roomId).update({ nextRoundStarted: true }).then(() => {
+              setTimeout(() => {
+                const playerIds = Object.keys(room.players || {});
+                if (playerIds.length === 0) return;
+                
+                const currentIndex = playerIds.indexOf(String(room.drawerId));
+                const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
+                const nextDrawer = room.players[nextDrawerId];
+                
+                db.collection('rooms').doc(roomId).update({
+                  status: 'drawing',
+                  drawerId: nextDrawerId,
+                  drawerName: nextDrawer.name,
+                  word: DRAW_WORDS[Math.floor(Math.random() * DRAW_WORDS.length)],
+                  imageData: '',
+                  round: room.round + 1,
+                  nextRoundStarted: false
+                });
+              }, 3000);
             });
-          }, 3000);
+          }
         }
+      },
+      onError: function(err) {
+        console.error('监听断开', err);
       }
     });
+
+    // 退出时清理监听
+    drawCleanup = () => {
+      if (drawWatcher) drawWatcher.close();
+      drawWatcher = null;
+      drawRoomId = null;
+      
+      // 从房间移除自己
+      db.collection('rooms').doc(roomId).get().then(res => {
+        if (res.data && res.data.length > 0) {
+          let players = res.data[0].players || {};
+          if (players[myId]) {
+            delete players[myId];
+            db.collection('rooms').doc(roomId).update({ players: players });
+          }
+        }
+      });
+    };
   };
 }
 
