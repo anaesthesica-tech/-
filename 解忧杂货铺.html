@@ -1786,7 +1786,7 @@ function bindDrawEvents(container) {
   const messagesEl = document.getElementById('draw-messages');
 
   document.getElementById('draw-create-btn').onclick = async () => {
-    const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+const roomId = String(Math.floor(1000 + Math.random() * 9000)); 
     
     // 使用 Supabase 建房间
     const { error } = await supabaseClient.from('rooms').insert([{
