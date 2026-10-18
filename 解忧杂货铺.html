@@ -1689,9 +1689,8 @@ function startGuessGame(container) {
 }
 
 /* ============================================================
-   ★★★ 你画我猜（Cloudflare Worker 版） ★★★
+   ★★★ 你画我猜（Cloudflare Worker + 网络重试版） ★★★
    ============================================================ */
-// 这里换成你刚才发给我的 Worker 网址
 const WORKER_URL = "https://index.anaesthesica.workers.dev";
 const DRAW_WORDS = ['苹果', '太阳', '小狗', '汽车', '大树', '房子', '雨伞', '眼镜', '手机', '电视', '鼠标', '键盘', '帽子', '鞋子', '花朵', '大象', '长颈鹿', '冰淇淋', '汉堡', '西瓜'];
 
@@ -1701,6 +1700,23 @@ let canvasCtx = null;
 let isDrawing = false;
 let drawCleanup = null;
 let lastRoomData = null;
+
+// 带重试的请求封装
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 6000); // 6秒超时
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(id);
+      if (res.ok) return res;
+    } catch (err) {
+      console.warn(`请求失败，第 ${i + 1} 次重试...`, err);
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+}
 
 function startDrawGame(container) {
   const user = loadUser();
@@ -1777,7 +1793,6 @@ function bindDrawEvents(container) {
   const waitingOverlay = document.getElementById('draw-waiting-overlay');
   const messagesEl = document.getElementById('draw-messages');
 
-  // 核心渲染函数
   function renderRoomData(room) {
     if (!room || lastRoomData === JSON.stringify(room)) return;
     lastRoomData = JSON.stringify(room);
@@ -1804,7 +1819,7 @@ function bindDrawEvents(container) {
         boardArea.style.display = 'flex';
         guessArea.style.display = 'none';
         targetWordEl.textContent = room.word;
-        if (canvas.width === 0) initCanvas(); // 只初始化一次
+        if (canvas.width === 0) initCanvas();
       } else {
         boardArea.style.display = 'none';
         guessArea.style.display = 'flex';
@@ -1838,8 +1853,7 @@ function bindDrawEvents(container) {
       }
       
       if (isDrawer && !room.next_round_started) {
-        // 通知服务器开启下一轮
-        fetch(WORKER_URL, {
+        fetchWithRetry(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...room, next_round_started: true })
@@ -1852,7 +1866,7 @@ function bindDrawEvents(container) {
             const nextDrawerId = playerIds[(currentIndex + 1) % playerIds.length];
             const nextDrawer = room.players[nextDrawerId];
             
-            await fetch(WORKER_URL, {
+            await fetchWithRetry(WORKER_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1872,10 +1886,9 @@ function bindDrawEvents(container) {
     }
   }
 
-  // 轮询拉取房间数据
   function pollRoom() {
     if (!drawRoomId) return;
-    fetch(`${WORKER_URL}?id=${drawRoomId}`)
+    fetchWithRetry(`${WORKER_URL}?id=${drawRoomId}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.id) renderRoomData(data);
@@ -1899,12 +1912,11 @@ function bindDrawEvents(container) {
     };
 
     try {
-      const res = await fetch(WORKER_URL, {
+      await fetchWithRetry(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRoom)
       });
-      if (!res.ok) throw new Error('创建失败');
       joinDrawRoom(roomId);
     } catch(e) {
       alert('创建房间失败，请检查网络');
@@ -1916,8 +1928,7 @@ function bindDrawEvents(container) {
     if (!roomId) return alert('请输入房间号');
     
     try {
-      const res = await fetch(`${WORKER_URL}?id=${roomId}`);
-      if (!res.ok) throw new Error('房间不存在');
+      const res = await fetchWithRetry(`${WORKER_URL}?id=${roomId}`);
       const data = await res.json();
       
       let players = data.players || {};
@@ -1926,7 +1937,7 @@ function bindDrawEvents(container) {
         score: players[user.memberId]?.score || 0
       };
       
-      await fetch(WORKER_URL, {
+      await fetchWithRetry(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, players })
@@ -1934,7 +1945,7 @@ function bindDrawEvents(container) {
       
       joinDrawRoom(roomId);
     } catch(e) {
-      alert('加入失败，房间可能不存在或已过期');
+      alert('加入失败，房间可能不存在或网络异常');
     }
   };
 
@@ -1974,10 +1985,10 @@ function bindDrawEvents(container) {
   canvas.addEventListener('touchend', (e) => { e.preventDefault(); isDrawing = false; }, {passive:false});
 
   document.getElementById('draw-submit-btn').onclick = async () => {
-    const imageData = canvas.toDataURL('image/jpeg', 0.4); // 降低画质节省流量
-    const data = await (await fetch(`${WORKER_URL}?id=${drawRoomId}`)).json();
+    const imageData = canvas.toDataURL('image/jpeg', 0.4);
+    const data = await (await fetchWithRetry(`${WORKER_URL}?id=${drawRoomId}`)).json();
     
-    await fetch(WORKER_URL, {
+    await fetchWithRetry(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, image_data: imageData, status: 'guessing' })
@@ -1996,14 +2007,14 @@ function bindDrawEvents(container) {
     const val = document.getElementById('draw-guess-input').value.trim();
     if (!val) return;
     
-    const data = await (await fetch(`${WORKER_URL}?id=${drawRoomId}`)).json();
+    const data = await (await fetchWithRetry(`${WORKER_URL}?id=${drawRoomId}`)).json();
     if (data.word === val) {
       document.getElementById('draw-guess-input').value = '';
       let players = data.players || {};
       if (!players[user.memberId]) players[user.memberId] = {};
       players[user.memberId].score = (players[user.memberId].score || 0) + 10;
       
-      await fetch(WORKER_URL, {
+      await fetchWithRetry(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, players, status: 'result' })
@@ -2021,29 +2032,24 @@ function bindDrawEvents(container) {
     lobbyEl.style.display = 'none';
     roomEl.style.display = 'flex';
     roomIdDisplay.textContent = roomId;
-    lastRoomData = null; // 重置一下状态
+    lastRoomData = null;
 
     if (drawInterval) clearInterval(drawInterval);
-    
-    // 先手动拉取一次
     pollRoom();
-    
-    // 每2秒拉取一次最新状态
     drawInterval = setInterval(pollRoom, 2000);
 
-    // 退出清理
     drawCleanup = async () => {
       if (drawInterval) {
         clearInterval(drawInterval);
         drawInterval = null;
       }
       try {
-        const data = await (await fetch(`${WORKER_URL}?id=${roomId}`)).json();
+        const data = await (await fetchWithRetry(`${WORKER_URL}?id=${roomId}`)).json();
         if (data && data.players) {
           let players = data.players || {};
           if (players[user.memberId]) {
             delete players[user.memberId];
-            await fetch(WORKER_URL, {
+            await fetchWithRetry(WORKER_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...data, players })
